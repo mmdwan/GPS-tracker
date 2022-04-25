@@ -1,0 +1,557 @@
+// lIBRARY
+
+// RTC
+
+#include "RTClib.h"
+
+#include <Adafruit_I2CDevice.h>
+
+// Micro SD
+
+#include <SPI.h>
+
+#include <SD.h>
+
+// GPS
+
+#include <TinyGPS++.h>
+
+#include <HardwareSerial.h>
+
+//ubi
+
+#include "Ubidots.h"
+
+#include <WiFi.h>
+
+#include <WiFiManager.h> 
+
+
+
+// PENDEKLARASIAN VARIABEL
+
+
+
+// RTC
+
+RTC_DS3231 rtc;
+
+int tahun;
+
+byte bulan,hari, jam, menit, detik;
+
+char namaHari[7][12] = {"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"};
+
+// Micro SD
+
+File myFile;
+
+// GPS
+
+TinyGPSPlus gps;
+
+static const byte RXpin2 = 16, TXpin2=17;
+
+HardwareSerial serial2(2);
+
+//
+
+const char* DEVICE_LABEL = "paj";
+
+const char* UBIDOTS_TOKEN = "BBFF-cMt2ILkxalB3EKdiWWeLTbAc5uDjOB";  
+// Put here your Ubidots TOKEN
+
+const char* WIFI_SSID = "OPPO A3s";      // Put here your Wi-Fi SSID
+
+const char* WIFI_PASS = "1sampai8";      // Put here your Wi-Fi password
+
+
+
+Ubidots ubidots(UBIDOTS_TOKEN, UBI_HTTP); //PENTING HARUS ADA 
+(inisialisasi)
+
+
+
+void setup() {
+ 
+ Serial.begin (9600);
+ 
+ serial2.begin(9600, SERIAL_8N1, RXpin2, TXpin2);
+  
+
+
+ // wifi manager
+ 
+ WiFi.mode(WIFI_STA); 
+
+
+  WiFiManager wm;
+ 
+   bool res;
+ 
+   res = wm.autoConnect("paj","1sampai8"); 
+
+
+
+    if(!res) {
+ 
+       Serial.println("Tidak Terhubung");
+ 
+   } 
+
+    else {
+ 
+       Serial.println("Terhubung");
+ 
+   }
+ 
+   //ubidots
+ 
+   while (WiFi.status() != WL_CONNECTED) {
+ 
+   delay(500);
+ 
+   Serial.print(".");
+ 
+ }
+ 
+ Serial.println("connected");
+ 
+ ubidots.setDebug(true);
+ 
+ // gps
+ 
+ Serial.print(F("DATA GPS"));
+ 
+ Serial.println(F("Sats HDOP  Latitude   Longitude   Fix  Course Speed Card 
+ Distance Course Card  Chars Sentences Checksum"));
+ 
+ Serial.println(F("           (deg)      (deg)       Age  --- from GPS ----  ---- to London  ----  RX    RX        Fail"));
+ 
+ Serial.println(F("---------------------------------------------------------------------------------------------------------"));
+
+
+
+// RTC
+ 
+ if (! rtc.begin()) {
+ 
+   Serial.println("Couldn't find RTC");
+ 
+   Serial.flush();
+ 
+   abort();
+ 
+ }
+
+ 
+ if (rtc.lostPower()) {
+ 
+   Serial.println("RTC lost power, let's set the time!");
+ 
+ }
+
+
+
+
+// Micro SD
+ 
+ while (!Serial) {
+ 
+   
+  
+}
+ 
+ Serial.print("Initializing SD card...");
+
+ 
+
+ if (!SD.begin(5)) {
+ 
+   Serial.println("initialization failed!");
+ 
+   while (1);
+ 
+ }
+ 
+ Serial.println("initialization done.");
+
+}
+
+void loop() {
+ 
+   // RTC
+ 
+   DateTime waktu = rtc.now() + TimeSpan(0,0,0,0);
+ 
+   tahun = waktu.year();
+ 
+   bulan = waktu.month();
+ 
+   hari = waktu.day();
+ 
+   jam = waktu.hour();
+ 
+   menit = waktu.minute();
+ 
+   detik = waktu.second();
+    
+
+
+   Serial.print(namaHari[waktu.dayOfTheWeek()]);
+ 
+   Serial.print(", ");
+ 
+   Serial.print(tahun);
+ 
+   Serial.print('/');
+ 
+   Serial.print(bulan);
+ 
+   Serial.print('/');
+ 
+   Serial.print(hari);
+ 
+   Serial.print(' ');
+ 
+   Serial.print(jam);
+ 
+   Serial.print(':');
+ 
+   Serial.print(menit);
+ 
+   Serial.print(':');
+ 
+   Serial.println(detik);
+ 
+   delay(1000);
+
+
+
+// gps
+
+ static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
+
+ 
+
+ printInt(gps.satellites.value(), gps.satellites.isValid(), 5);
+ 
+ printFloat(gps.hdop.hdop(), gps.hdop.isValid(), 6, 1);
+ 
+ printFloat(gps.location.lat(), gps.location.isValid(), 11, 6);
+ 
+ printFloat(gps.location.lng(), gps.location.isValid(), 12, 6);
+ 
+ printInt(gps.location.age(), gps.location.isValid(), 5);
+ 
+ printFloat(gps.altitude.meters(), gps.altitude.isValid(), 7, 2);
+ 
+ printFloat(gps.course.deg(), gps.course.isValid(), 7, 2);
+ 
+ printFloat(gps.speed.kmph(), gps.speed.isValid(), 6, 2);
+ 
+ printStr(gps.course.isValid() ? TinyGPSPlus::cardinal(gps.course.deg()) : "* ", 6);
+
+
+
+ unsigned long distanceKmToLondon =
+ 
+   (unsigned long)TinyGPSPlus::distanceBetween(
+ 
+     gps.location.lat(),
+ 
+     gps.location.lng(),
+ 
+     LONDON_LAT, 
+ 
+     LONDON_LON) / 1000;
+ 
+ printInt(distanceKmToLondon, gps.location.isValid(), 9);
+
+ 
+
+ double courseToLondon =
+ 
+   TinyGPSPlus::courseTo(
+ 
+     gps.location.lat(),
+ 
+     gps.location.lng(),
+ 
+     LONDON_LAT, 
+ 
+     LONDON_LON);
+
+ 
+
+ printFloat(courseToLondon, gps.location.isValid(), 7, 2);
+
+ 
+
+ const char *cardinalToLondon = TinyGPSPlus::cardinal(courseToLondon);
+
+ 
+
+ printStr(gps.location.isValid() ? cardinalToLondon : "* ", 6);
+
+ 
+
+ printInt(gps.charsProcessed(), true, 6);
+ 
+ printInt(gps.sentencesWithFix(), true, 10);
+ 
+ printInt(gps.failedChecksum(), true, 9);
+ 
+ Serial.println();
+ 
+
+ 
+smartDelay(1000);
+
+ 
+
+ if (millis() > 5000 && gps.charsProcessed() < 10)
+ 
+   Serial.println(F("No GPS data received: check wiring"));
+ 
+
+
+// Micro SD
+ 
+ myFile = SD.open("/data.txt", FILE_WRITE);
+ 
+ if (myFile) {
+ 
+   int sensorValue = analogRead(34);
+ 
+    Serial.print("Kualitas Udara : ");
+ 
+    myFile.print("kualitas udara : ");
+ 
+    Serial.print(sensorValue, DEC);
+ 
+    myFile.print(sensorValue, DEC);
+ 
+    Serial.println("  ISPU");
+ 
+    myFile.print("   ISPU");
+ 
+   // close the file:
+ 
+   myFile.close();
+ 
+   Serial.println("done.");
+ 
+ } else {
+ 
+   Serial.println("error opening data.txt");
+ 
+ }
+ 
+ myFile = SD.open("/data.txt");
+ 
+ if (myFile) {
+ 
+   Serial.println("data.txt:");
+ 
+   while (myFile.available()) {
+ 
+     Serial.write(myFile.read());
+ 
+   }
+ 
+   myFile.close();
+ 
+ } else {
+ 
+   Serial.println("error opening data.txt");
+ 
+ }
+ 
+ //GPS dan Ubidots
+ 
+ float latitude = gps.location.lat();
+ 
+ float longitude = gps.location.lng();
+
+ 
+
+ float arah = gps.course.deg();
+ 
+ float kecepatan = gps.speed.kmph();
+ 
+ byte satelit = gps.satellites.value();
+ 
+ unsigned sensor = digitalRead(15);
+
+ 
+
+ char* str_lat = (char*)malloc(sizeof(char) * 20);
+ 
+ char* str_lng = (char*)malloc(sizeof(char) * 20);
+
+ 
+
+ sprintf(str_lat, "%f", latitude);
+ 
+ sprintf(str_lng, "%f", longitude);
+
+ 
+
+ char* context = (char*)malloc(sizeof(char) *40);
+  
+
+
+ ubidots.addContext("lat", str_lat);
+ 
+ ubidots.addContext("lng", str_lng);  
+ 
+ ubidots.getContext(context);
+  
+
+
+ ubidots.add("arah", arah, context);
+ 
+ ubidots.add("kecepatan", kecepatan);  // Change for your variable name
+ 
+ ubidots.add("satelit", satelit);
+ 
+ ubidots.add("kualitas udara", sensor);
+
+ 
+
+ free(str_lat);
+ 
+ free(str_lng);
+ 
+ free(context);
+
+ 
+
+ bool bufferSent = false;
+ 
+ bufferSent = ubidots.send(DEVICE_LABEL);  // Will send data to a device label that matches the device Id
+
+
+ 
+
+ if (bufferSent) {
+ 
+
+
+   Serial.println("Values sent by the device");
+ 
+ }
+
+ 
+
+ delay(5000);
+ 
+
+ 
+}
+
+
+
+static void smartDelay(unsigned long ms)
+
+{
+
+
+ unsigned long start = millis();
+ 
+ do 
+
+ {
+ 
+   while (serial2.available())
+ 
+     gps.encode(serial2.read());
+ 
+ } while (millis() - start < ms);
+
+}
+
+
+
+static void printFloat(float val, bool valid, int len, int prec)
+
+{
+
+ if (!valid)
+ 
+ {
+ 
+   while (len-- > 1)
+ 
+     Serial.print('*');
+ 
+   Serial.print(' ');
+ 
+ }
+ 
+ else
+ 
+ {
+ 
+   Serial.print(val, prec);
+ 
+   int vi = abs((int)val);
+ 
+   int flen = prec + (val < 0.0 ? 2 : 1); // . and -
+ 
+   flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
+ 
+   for (int i=flen; i<len; ++i)
+ 
+     Serial.print(' ');
+ 
+ }
+ 
+ smartDelay(0);
+
+}
+
+
+
+static void printInt(unsigned long val, bool valid, int len)
+
+{
+ 
+ char sz[32] = "*";
+ 
+ if (valid)
+ 
+   sprintf(sz, "%ld", val);
+ 
+ sz[len] = 0;
+ 
+ for (int i=strlen(sz); i<len; ++i)
+ 
+   sz[i] = ' ';
+ 
+ if (len > 0) 
+ 
+   sz[len-1] = ' ';
+ 
+ Serial.print(sz);
+ 
+ smartDelay(0);
+
+}
+
+
+
+static void printStr(const char *str, int len)
+
+{
+
+ int slen = strlen(str);
+ 
+ for (int i=0; i<len; ++i)
+ 
+   Serial.print(i<slen ? str[i] : ' ');
+ 
+ smartDelay(0);
+
+}
